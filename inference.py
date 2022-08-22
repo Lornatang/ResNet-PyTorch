@@ -116,7 +116,7 @@ if __name__ == "__main__":
     parser.add_argument("--model_std_parameters", type=list, default=[0.229, 0.224, 0.225])
     parser.add_argument("--class_label_file", type=str, default="./data/ImageNet_1K_labels_map.txt")
     parser.add_argument("--model_num_classes", type=int, default=1000)
-    parser.add_argument("--model_weights_path", type=str, default="./results/pretrained_models/ResNet18-ImageNet_1K.pth.tar")
+    parser.add_argument("--model_weights_path", type=str, default="./results/pretrained_models/ResNet18-ImageNet_1K-57bb63e.pth.tar")
     parser.add_argument("--image_path", type=str, default="./figure/n01440764_36.JPEG")
     parser.add_argument("--image_size", type=int, default=224)
     parser.add_argument("--device_type", type=str, default="cpu", choices=["cpu", "cuda"])
