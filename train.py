@@ -42,13 +42,13 @@ def main():
     train_prefetcher, valid_prefetcher = load_dataset()
     print(f"Load `{config.model_arch_name}` datasets successfully.")
 
-    mobilenet_v3_model, ema_mobilenet_v3_model = build_model()
+    resnet_model, ema_resnet_model = build_model()
     print(f"Build `{config.model_arch_name}` model successfully.")
 
     pixel_criterion = define_loss()
     print("Define all loss functions successfully.")
 
-    optimizer = define_optimizer(mobilenet_v3_model)
+    optimizer = define_optimizer(resnet_model)
     print("Define all optimizer functions successfully.")
 
     scheduler = define_scheduler(optimizer)
@@ -56,10 +56,10 @@ def main():
 
     print("Check whether to load pretrained model weights...")
     if config.pretrained_model_weights_path:
-        mobilenet_v3_model, ema_mobilenet_v3_model, start_epoch, best_acc1, optimizer, scheduler = load_state_dict(
-            mobilenet_v3_model,
+        resnet_model, ema_resnet_model, start_epoch, best_acc1, optimizer, scheduler = load_state_dict(
+            resnet_model,
             config.pretrained_model_weights_path,
-            ema_mobilenet_v3_model,
+            ema_resnet_model,
             start_epoch,
             best_acc1,
             optimizer,
@@ -70,10 +70,10 @@ def main():
 
     print("Check whether the pretrained model is restored...")
     if config.resume:
-        mobilenet_v3_model, ema_mobilenet_v3_model, start_epoch, best_acc1, optimizer, scheduler = load_state_dict(
-            mobilenet_v3_model,
+        resnet_model, ema_resnet_model, start_epoch, best_acc1, optimizer, scheduler = load_state_dict(
+            resnet_model,
             config.pretrained_model_weights_path,
-            ema_mobilenet_v3_model,
+            ema_resnet_model,
             start_epoch,
             best_acc1,
             optimizer,
@@ -96,8 +96,8 @@ def main():
     scaler = amp.GradScaler()
 
     for epoch in range(start_epoch, config.epochs):
-        train(mobilenet_v3_model, ema_mobilenet_v3_model, train_prefetcher, pixel_criterion, optimizer, epoch, scaler, writer)
-        acc1 = validate(ema_mobilenet_v3_model, valid_prefetcher, epoch, writer, "Valid")
+        train(resnet_model, ema_resnet_model, train_prefetcher, pixel_criterion, optimizer, epoch, scaler, writer)
+        acc1 = validate(ema_resnet_model, valid_prefetcher, epoch, writer, "Valid")
         print("\n")
 
         # Update LR
@@ -109,8 +109,8 @@ def main():
         best_acc1 = max(acc1, best_acc1)
         save_checkpoint({"epoch": epoch + 1,
                          "best_acc1": best_acc1,
-                         "state_dict": mobilenet_v3_model.state_dict(),
-                         "ema_state_dict": ema_mobilenet_v3_model.state_dict(),
+                         "state_dict": resnet_model.state_dict(),
+                         "ema_state_dict": ema_resnet_model.state_dict(),
                          "optimizer": optimizer.state_dict(),
                          "scheduler": scheduler.state_dict()},
                         f"epoch_{epoch + 1}.pth.tar",
@@ -157,13 +157,13 @@ def load_dataset() -> [CUDAPrefetcher, CUDAPrefetcher]:
 
 
 def build_model() -> [nn.Module, nn.Module]:
-    mobilenet_v3_model = model.__dict__[config.model_arch_name](num_classes=config.model_num_classes)
-    mobilenet_v3_model = mobilenet_v3_model.to(device=config.device, memory_format=torch.channels_last)
+    resnet_model = model.__dict__[config.model_arch_name](num_classes=config.model_num_classes)
+    resnet_model = resnet_model.to(device=config.device, memory_format=torch.channels_last)
 
     ema_avg = lambda averaged_model_parameter, model_parameter, num_averaged: (1 - config.model_ema_decay) * averaged_model_parameter + config.model_ema_decay * model_parameter
-    ema_mobilenet_v3_model = AveragedModel(mobilenet_v3_model, avg_fn=ema_avg)
+    ema_resnet_model = AveragedModel(resnet_model, avg_fn=ema_avg)
 
-    return mobilenet_v3_model, ema_mobilenet_v3_model
+    return resnet_model, ema_resnet_model
 
 
 def define_loss() -> nn.CrossEntropyLoss:

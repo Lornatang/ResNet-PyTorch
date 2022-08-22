@@ -2,7 +2,8 @@
 
 ## Overview
 
-This repository contains an op-for-op PyTorch reimplementation of [Searching for ResNet](https://arxiv.org/pdf/1905.02244v5.pdf).
+This repository contains an op-for-op PyTorch reimplementation
+of [Searching for ResNet](https://arxiv.org/pdf/1512.03385v1.pdf).
 
 ## Table of contents
 
@@ -18,7 +19,7 @@ This repository contains an op-for-op PyTorch reimplementation of [Searching for
     - [Result](#result)
     - [Contributing](#contributing)
     - [Credit](#credit)
-        - [Searching for ResNet](#searching-for-resnet18)
+        - [Deep Residual Learning for Image Recognition](#deep-residual-learning-for-image-recognition)
 
 ## Download weights
 
@@ -45,7 +46,7 @@ Both training and testing only need to modify the `config.py` file.
 - line 32: `model_std_parameters` change to `[0.229, 0.224, 0.225]`.
 - line 34: `model_num_classes` change to `1000`.
 - line 36: `mode` change to `test`.
-- line 89: `model_weights_path` change to `./results/pretrained_models/ResNet_small-ImageNet_1K-73d198d1.pth.tar`.
+- line 89: `model_weights_path` change to `./results/pretrained_models/ResNet18-ImageNet_1K-57bb63e.pth.tar`.
 
 ```bash
 python3 test.py
@@ -58,7 +59,7 @@ python3 test.py
 - line 32: `model_std_parameters` change to `[0.229, 0.224, 0.225]`.
 - line 34: `model_num_classes` change to `1000`.
 - line 36: `mode` change to `train`.
-- line 50: `pretrained_model_weights_path` change to `./results/pretrained_models/ResNet_small-ImageNet_1K-73d198d1.pth.tar`.
+- line 50: `pretrained_model_weights_path` change to `./results/pretrained_models/ResNet18-ImageNet_1K-57bb63e.pth.tar`.
 
 ```bash
 python3 train.py
@@ -79,17 +80,20 @@ python3 train.py
 
 ## Result
 
-Source of original paper results: [https://arxiv.org/pdf/1905.02244v5.pdf](https://arxiv.org/pdf/1905.02244v5.pdf))
+Source of original paper results: [https://arxiv.org/pdf/1512.03385v1.pdf](https://arxiv.org/pdf/1512.03385v1.pdf))
 
 In the following table, the top-x error value in `()` indicates the result of the project, and `-` indicates no test.
 
-|         Model          |   Dataset   | Top-1 error (val) | Top-5 error (val) |
-|:----------------------:|:-----------:|:-----------------:|:-----------------:|
-| resnet18-1.0 | ImageNet_1K | 32.6%(**32.3%**)  |   -(**12.5%**)    |
-| mobilenet_v3_large-1.0 | ImageNet_1K | 24.8%(**24.7%**)  |    -(**7.4%**)    |
+|   Model   |   Dataset   | Top-1 error (val)  | Top-5 error (val) |
+|:---------:|:-----------:|:------------------:|:-----------------:|
+| resnet18  | ImageNet_1K | 27.88%(**30.25%**) |   -(**10.93%**)   |
+| resnet34  | ImageNet_1K | 25.03%(**26.71%**) | 7.76%(**8.58%**)  |
+| resnet50  | ImageNet_1K | 22.85%(**19.65%**) | 6.71%(**4.87%**)  |
+| resnet101 | ImageNet_1K | 21.75%(**18.33%**) | 6.05%(**4.34%**)  |
+| resnet152 | ImageNet_1K | 21.43%(**17.66%**) | 5.71%(**4.08%**)  |
 
 ```bash
-# Download `ResNet_small-ImageNet_1K-73d198d1.pth.tar` weights to `./results/pretrained_models`
+# Download `ResNet18-ImageNet_1K-57bb63e.pth.tar` weights to `./results/pretrained_models`
 # More detail see `README.md<Download weights>`
 python3 ./inference.py 
 ```
@@ -102,7 +106,7 @@ Output:
 
 ```text
 Build `resnet18` model successfully.
-Load `resnet18` model weights `/ResNet-PyTorch/results/pretrained_models/ResNet_small-ImageNet_1K-73d198d1.pth.tar` successfully.
+Load `resnet18` model weights `/ResNet-PyTorch/results/pretrained_models/ResNet18-ImageNet_1K-57bb63e.pth.tar` successfully.
 tench, Tinca tinca                                                          (91.46%)
 barracouta, snoek                                                           (7.15%)
 gar, garfish, garpike, billfish, Lepisosteus osseus                         (0.43%)
@@ -119,35 +123,33 @@ I look forward to seeing what the community does with these models!
 
 ### Credit
 
-#### Searching for ResNet
+#### Deep Residual Learning for Image Recognition
 
-*Andrew Howard, Mark Sandler, Grace Chu, Liang-Chieh Chen, Bo Chen, Mingxing Tan, Weijun Wang, Yukun Zhu, Ruoming Pang,
-Vijay Vasudevan, Quoc V. Le, Hartwig Adam*
+*Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun*
 
 ##### Abstract
 
-We present the next generation of MobileNets based on a combination of complementary search techniques as well as a
-novel architecture design. ResNet is tuned to mobile phone CPUs through a combination of hardware-aware network
-architecture search (NAS) complemented by the NetAdapt algorithm and then subsequently improved through novel
-architecture advances. This paper starts the exploration of how automated search algorithms and network design can work
-together to harness complementary approaches improving the overall state of the art. Through this process we create two
-new MobileNet models for release: ResNet-Large and ResNet-Small which are targeted for high and low resource
-use cases. These models are then adapted and applied to the tasks of object detection and semantic segmentation. For the
-task of semantic segmentation (or any dense pixel prediction), we propose a new efficient segmentation decoder Lite
-Reduced Atrous Spatial Pyramid Pooling (LR-ASPP). We achieve new state of the art results for mobile classification,
-detection and segmentation. ResNet-Large is 3.2\% more accurate on ImageNet classification while reducing latency
-by 15\% compared to MobileNetV2. ResNet-Small is 4.6\% more accurate while reducing latency by 5\% compared to
-MobileNetV2. ResNet-Large detection is 25\% faster at roughly the same accuracy as MobileNetV2 on COCO detection.
-ResNet-Large LR-ASPP is 30\% faster than MobileNetV2 R-ASPP at similar accuracy for Cityscapes segmentation.
+Deeper neural networks are more difficult to train. We present a residual learning framework to ease the training of
+networks that are substantially deeper than those used previously. We explicitly reformulate the layers as learning
+residual functions with reference to the layer inputs, instead of learning unreferenced functions. We provide
+comprehensive empirical evidence showing that these residual networks are easier to optimize, and can gain accuracy from
+considerably increased depth. On the ImageNet dataset we evaluate residual nets with a depth of up to 152 layers---8x
+deeper than VGG nets but still having lower complexity. An ensemble of these residual nets achieves 3.57% error on the
+ImageNet test set. This result won the 1st place on the ILSVRC 2015 classification task. We also present analysis on
+CIFAR-10 with 100 and 1000 layers.
+The depth of representations is of central importance for many visual recognition tasks. Solely due to our extremely
+deep representations, we obtain a 28% relative improvement on the COCO object detection dataset. Deep residual nets are
+foundations of our submissions to ILSVRC & COCO 2015 competitions, where we also won the 1st places on the tasks of
+ImageNet detection, ImageNet localization, COCO detection, and COCO segmentation.
 
-[[Paper]](https://arxiv.org/pdf/1905.02244v5.pdf)
+[[Paper]](https://arxiv.org/pdf/1512.03385v1.pdf)
 
 ```bibtex
-@inproceedings{howard2019searching,
-  title={Searching for resnet18},
-  author={Howard, Andrew and Sandler, Mark and Chu, Grace and Chen, Liang-Chieh and Chen, Bo and Tan, Mingxing and Wang, Weijun and Zhu, Yukun and Pang, Ruoming and Vasudevan, Vijay and others},
-  booktitle={Proceedings of the IEEE/CVF international conference on computer vision},
-  pages={1314--1324},
-  year={2019}
+@inproceedings{he2016deep,
+  title={Deep residual learning for image recognition},
+  author={He, Kaiming and Zhang, Xiangyu and Ren, Shaoqing and Sun, Jian},
+  booktitle={Proceedings of the IEEE conference on computer vision and pattern recognition},
+  pages={770--778},
+  year={2016}
 }
 ```
