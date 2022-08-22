@@ -11,142 +11,184 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from functools import partial
-from typing import Any, List
+from typing import Any, List, Type, Union, Optional
 
 import torch
 from torch import Tensor
 from torch import nn
-from torchvision.ops.misc import Conv2dNormActivation, SqueezeExcitation
-
-from utils import make_divisible
 
 __all__ = [
-    "MobileNetV3",
-    "InvertedResidual",
-    "mobilenet_v3_small", "mobilenet_v3_large"
-]
-
-mobilenet_v3_small_cfg: List[list[int, int, int, int, bool, str, int, int, int]] = [
-    # in_channels, expand_channels, out_channels, kernel_size, use_se, activation_layer_name, stride, dilation
-    [16, 16, 16, 3, True, "ReLU", 2, 1],
-    [16, 72, 24, 3, False, "ReLU", 2, 1],
-    [24, 88, 24, 3, False, "ReLU", 1, 1],
-    [24, 96, 40, 5, True, "Hardswish", 2, 1],
-    [40, 240, 40, 5, True, "Hardswish", 1, 1],
-    [40, 240, 40, 5, True, "Hardswish", 1, 1],
-    [40, 120, 48, 5, True, "Hardswish", 1, 1],
-    [48, 144, 48, 5, True, "Hardswish", 1, 1],
-    [48, 288, 96, 5, True, "Hardswish", 2, 1],
-    [96, 576, 96, 5, True, "Hardswish", 1, 1],
-    [96, 576, 96, 5, True, "Hardswish", 1, 1],
-]
-mobilenet_v3_large_cfg: List[list[int, int, int, int, bool, str, int, int, int]] = [
-    # in_channels, expand_channels, out_channels, kernel_size, use_se, activation_layer_name, stride, dilation
-    [16, 16, 16, 3, False, "ReLU", 1, 1],
-    [16, 64, 24, 3, False, "ReLU", 2, 1],
-    [24, 72, 24, 3, False, "ReLU", 1, 1],
-    [24, 72, 40, 5, True, "ReLU", 2, 1],
-    [40, 120, 40, 5, True, "ReLU", 1, 1],
-    [40, 120, 40, 5, True, "ReLU", 1, 1],
-    [40, 240, 80, 3, False, "Hardswish", 2, 1],
-    [80, 200, 80, 3, False, "Hardswish", 1, 1],
-    [80, 184, 80, 3, False, "Hardswish", 1, 1],
-    [80, 184, 80, 3, False, "Hardswish", 1, 1],
-    [80, 480, 112, 3, True, "Hardswish", 1, 1],
-    [112, 672, 112, 3, True, "Hardswish", 1, 1],
-    [112, 672, 160, 5, True, "Hardswish", 2, 1],
-    [160, 960, 160, 5, True, "Hardswish", 1, 1],
-    [160, 960, 160, 5, True, "Hardswish", 1, 1],
+    "ResNet",
+    "resnet18",
 ]
 
 
-class MobileNetV3(nn.Module):
+class _BasicBlock(nn.Module):
+    expansion: int = 1
 
     def __init__(
             self,
-            num_classes: int = 1000,
-            arch_name: str = "mobilenet_v3_small",
-            width_mult: float = 1.0,
-            dropout: float = 0.2,
-            reduced_tail: bool = False,
-            dilated: bool = False,
+            in_channels: int,
+            out_channels: int,
+            stride: int,
+            downsample: Optional[nn.Module] = None,
+            groups: int = 1,
+            base_channels: int = 64,
     ) -> None:
-        super(MobileNetV3, self).__init__()
-        reduce_divider = 2 if reduced_tail else 1
-        dilation = 2 if dilated else 1
+        super(_BasicBlock, self).__init__()
+        self.stride = stride
+        self.downsample = downsample
+        self.groups = groups
+        self.base_channels = base_channels
 
-        if arch_name == "mobilenet_v3_small":
-            arch_cfg = mobilenet_v3_small_cfg
-            last_channels = make_divisible(1024 // reduce_divider, 8)
-        else:
-            arch_cfg = mobilenet_v3_large_cfg
-            last_channels = make_divisible(1280 // reduce_divider, 8)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, (3, 3), (stride, stride), (1, 1), bias=False)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.relu = nn.ReLU(True)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, (3, 3), (1, 1), (1, 1), bias=False)
+        self.bn2 = nn.BatchNorm2d(out_channels)
 
-        # Modify arch config
-        arch_cfg[-3][2] = arch_cfg[-3][2] // reduce_divider
-        arch_cfg[-3][-1] = dilation
+    def forward(self, x: Tensor) -> Tensor:
+        identity = x
 
-        arch_cfg[-2][0] = arch_cfg[-2][0] // reduce_divider
-        arch_cfg[-2][1] = arch_cfg[-2][1] // reduce_divider
-        arch_cfg[-2][2] = arch_cfg[-2][2] // reduce_divider
-        arch_cfg[-2][-1] = dilation
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
 
-        arch_cfg[-1][0] = arch_cfg[-1][0] // reduce_divider
-        arch_cfg[-1][1] = arch_cfg[-1][1] // reduce_divider
-        arch_cfg[-1][2] = arch_cfg[-1][2] // reduce_divider
-        arch_cfg[-1][-1] = dilation
+        out = self.conv2(out)
+        out = self.bn2(out)
 
-        features: List[nn.Module] = [
-            Conv2dNormActivation(3,
-                                 arch_cfg[0][0],
-                                 kernel_size=3,
-                                 stride=2,
-                                 padding=1,
-                                 norm_layer=partial(nn.BatchNorm2d, eps=0.001, momentum=0.01),
-                                 activation_layer=nn.Hardswish,
-                                 inplace=True,
-                                 bias=False,
-                                 )
-        ]
-        for in_channels, expand_channels, out_channels, kernel_size, use_se, activation_layer_name, stride, dilation in arch_cfg:
-            features.append(
-                InvertedResidual(
-                    in_channels,
-                    expand_channels,
-                    out_channels,
-                    kernel_size,
-                    use_se,
-                    activation_layer_name,
-                    stride,
-                    dilation,
-                    width_mult))
-        classifier_channels = int(arch_cfg[-1][2] * 6)
-        features.append(
-            Conv2dNormActivation(arch_cfg[-1][2],
-                                 classifier_channels,
-                                 kernel_size=1,
-                                 stride=1,
-                                 padding=0,
-                                 norm_layer=partial(nn.BatchNorm2d, eps=0.001, momentum=0.01),
-                                 activation_layer=nn.Hardswish,
-                                 inplace=True,
-                                 bias=False,
-                                 ),
-        )
-        self.features = nn.Sequential(*features)
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out = torch.add(out, identity)
+        out = self.relu(out)
+
+        return out
+
+
+class _Bottleneck(nn.Module):
+    expansion: int = 4
+
+    def __init__(
+            self,
+            in_channels: int,
+            out_channels: int,
+            stride: int,
+            downsample: Optional[nn.Module] = None,
+            groups: int = 1,
+            base_channels: int = 64,
+    ) -> None:
+        super(_Bottleneck, self).__init__()
+        self.stride = stride
+        self.downsample = downsample
+        self.groups = groups
+        self.base_channels = base_channels
+
+        channels = int(out_channels * (base_channels / 64.0)) * groups
+
+        self.conv1 = nn.Conv2d(in_channels, channels, (1, 1), (1, 1), (0, 0), bias=False)
+        self.bn1 = nn.BatchNorm2d(channels)
+        self.conv2 = nn.Conv2d(channels, channels, (3, 3), (stride, stride), (1, 1), groups=groups, bias=False)
+        self.bn2 = nn.BatchNorm2d(channels)
+        self.conv3 = nn.Conv2d(channels, int(out_channels * self.expansion), (1, 1), (1, 1), (0, 0), bias=False)
+        self.bn3 = nn.BatchNorm2d(int(out_channels * self.expansion))
+        self.relu = nn.ReLU(True)
+
+    def forward(self, x: Tensor) -> Tensor:
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out = torch.add(out, identity)
+        out = self.relu(out)
+
+        return out
+
+
+class ResNet(nn.Module):
+
+    def __init__(
+            self,
+            arch_cfg: List[int],
+            block: Type[Union[_BasicBlock, _Bottleneck]],
+            groups: int = 1,
+            channels_per_group: int = 64,
+            num_classes: int = 1000,
+    ) -> None:
+        super(ResNet, self).__init__()
+        self.in_channels = 64
+        self.dilation = 1
+        self.groups = groups
+        self.base_channels = channels_per_group
+
+        self.conv1 = nn.Conv2d(3, self.in_channels, (7, 7), (2, 2), (3, 3), bias=False)
+        self.bn1 = nn.BatchNorm2d(self.in_channels)
+        self.relu = nn.ReLU(True)
+        self.maxpool = nn.MaxPool2d((3, 3), (2, 2), (1, 1))
+
+        self.layer1 = self._make_layer(arch_cfg[0], block, 64, 1)
+        self.layer2 = self._make_layer(arch_cfg[1], block, 128, 2)
+        self.layer3 = self._make_layer(arch_cfg[2], block, 256, 2)
+        self.layer4 = self._make_layer(arch_cfg[3], block, 512, 2)
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
 
-        self.classifier = nn.Sequential(
-            nn.Linear(classifier_channels, last_channels),
-            nn.Hardswish(True),
-            nn.Dropout(dropout, True),
-            nn.Linear(last_channels, num_classes),
-        )
+        self.fc = nn.Linear(512 * block.expansion, num_classes)
 
         # Initialize neural network weights
         self._initialize_weights()
+
+    def _make_layer(
+            self,
+            repeat_times: int,
+            block: Type[Union[_BasicBlock, _Bottleneck]],
+            channels: int,
+            stride: int = 1,
+    ) -> nn.Sequential:
+        downsample = None
+
+        if stride != 1 or self.in_channels != channels * block.expansion:
+            downsample = nn.Sequential(
+                nn.Conv2d(self.in_channels, channels * block.expansion, (1, 1), (stride, stride), (0, 0), bias=False),
+                nn.BatchNorm2d(channels * block.expansion),
+            )
+
+        layers = [
+            block(
+                self.in_channels,
+                channels,
+                stride,
+                downsample,
+                self.groups,
+                self.base_channels
+            )
+        ]
+        self.in_channels = channels * block.expansion
+        for _ in range(1, repeat_times):
+            layers.append(
+                block(
+                    self.in_channels,
+                    channels,
+                    1,
+                    None,
+                    self.groups,
+                    self.base_channels,
+                )
+            )
+
+        return nn.Sequential(*layers)
 
     def forward(self, x: Tensor) -> Tensor:
         out = self._forward_impl(x)
@@ -155,10 +197,19 @@ class MobileNetV3(nn.Module):
 
     # Support torch.script function
     def _forward_impl(self, x: Tensor) -> Tensor:
-        out = self.features(x)
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+        out = self.maxpool(out)
+
+        out = self.layer1(out)
+        out = self.layer2(out)
+        out = self.layer3(out)
+        out = self.layer4(out)
+
         out = self.avgpool(out)
         out = torch.flatten(out, 1)
-        out = self.classifier(out)
+        out = self.fc(out)
 
         return out
 
@@ -166,116 +217,36 @@ class MobileNetV3(nn.Module):
         for module in self.modules():
             if isinstance(module, nn.Conv2d):
                 nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
-                if module.bias is not None:
-                    nn.init.zeros_(module.bias)
             elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
-                nn.init.ones_(module.weight)
-                nn.init.zeros_(module.bias)
-            elif isinstance(module, nn.Linear):
-                nn.init.normal_(module.weight, 0, 0.01)
-                nn.init.zeros_(module.bias)
+                nn.init.constant_(module.weight, 1)
+                nn.init.constant_(module.bias, 0)
 
 
-class InvertedResidual(nn.Module):
-    def __init__(
-            self,
-            in_channels: int,
-            expand_channels: int,
-            out_channels: int,
-            kernel_size: int,
-            use_se: bool,
-            activation_layer_name: str,
-            stride: int,
-            dilation: int,
-            width_mult: float,
-    ) -> None:
-        super(InvertedResidual, self).__init__()
-        in_channels = make_divisible(int(in_channels * width_mult), 8)
-        expand_channels = make_divisible(int(expand_channels * width_mult), 8)
-        out_channels = make_divisible(int(out_channels * width_mult), 8)
-        if activation_layer_name == "Hardswish":
-            activation_layer = nn.Hardswish
-        else:
-            activation_layer = nn.ReLU
-        stride = 1 if dilation > 1 else stride
-
-        self.use_res_connect = stride == 1 and in_channels == out_channels
-
-        if stride not in [1, 2]:
-            raise ValueError(f"stride should be 1 or 2 instead of {stride}")
-
-        block: List[nn.Module] = []
-        if in_channels != expand_channels:
-            # expand
-            block.append(
-                Conv2dNormActivation(
-                    in_channels,
-                    expand_channels,
-                    kernel_size=1,
-                    stride=1,
-                    padding=0,
-                    norm_layer=partial(nn.BatchNorm2d, eps=0.001, momentum=0.01),
-                    activation_layer=activation_layer,
-                    inplace=True,
-                    bias=False,
-                )
-            )
-        # Depth-wise + project
-        block.append(
-            # Depth-wise
-            Conv2dNormActivation(
-                expand_channels,
-                expand_channels,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=(kernel_size - 1) // 2 * dilation,
-                groups=expand_channels,
-                norm_layer=partial(nn.BatchNorm2d, eps=0.001, momentum=0.01),
-                activation_layer=activation_layer,
-                dilation=dilation,
-                inplace=True,
-                bias=False,
-            )
-        )
-        # SqueezeExcitation
-        if use_se:
-            block.append(SqueezeExcitation(input_channels=expand_channels,
-                                           squeeze_channels=make_divisible(expand_channels // 4, 8),
-                                           activation=nn.ReLU,
-                                           scale_activation=nn.Hardsigmoid))
-        block.append(
-            # project
-            Conv2dNormActivation(
-                expand_channels,
-                out_channels,
-                kernel_size=1,
-                stride=1,
-                padding=0,
-                norm_layer=partial(nn.BatchNorm2d, eps=0.001, momentum=0.01),
-                activation_layer=None,
-                dilation=dilation,
-                inplace=True,
-                bias=False,
-            )
-        )
-        self.block = nn.Sequential(*block)
-
-    def forward(self, x: Tensor) -> Tensor:
-        out = self.block(x)
-
-        if self.use_res_connect:
-            out = torch.add(out, x)
-
-        return out
-
-
-def mobilenet_v3_small(**kwargs: Any) -> MobileNetV3:
-    model = MobileNetV3(arch_name="mobilenet_v3_small", **kwargs)
+def resnet18(**kwargs: Any) -> ResNet:
+    model = ResNet([2, 2, 2, 2], _BasicBlock, **kwargs)
 
     return model
 
 
-def mobilenet_v3_large(**kwargs: Any) -> MobileNetV3:
-    model = MobileNetV3(arch_name="mobilenet_v3_large", **kwargs)
+def resnet34(**kwargs: Any) -> ResNet:
+    model = ResNet([3, 4, 6, 3], _BasicBlock, **kwargs)
+
+    return model
+
+
+def resnet50(**kwargs: Any) -> ResNet:
+    model = ResNet([3, 4, 6, 3], _Bottleneck, **kwargs)
+
+    return model
+
+
+def resnet101(**kwargs: Any) -> ResNet:
+    model = ResNet([3, 4, 23, 3], _Bottleneck, **kwargs)
+
+    return model
+
+
+def resnet152(**kwargs: Any) -> ResNet:
+    model = ResNet([3, 8, 36, 3], _Bottleneck, **kwargs)
 
     return model
