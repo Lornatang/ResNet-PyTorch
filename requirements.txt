@@ -1,5 +1,5 @@
 Pillow==9.3.0
-torch==1.12.1+cu116
+torch==1.13.1
 torchvision==0.13.1+cu116
 numpy==1.23.1
 opencv-python==4.6.0.66
